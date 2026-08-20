@@ -1,0 +1,201 @@
+// InstituteOps — Prisma Schema
+// Matches TRD.md PostgreSQL DDL exactly
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ───────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  COORDINATOR
+  TEACHER
+  STUDENT
+  PARENT
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum TestType {
+  WEEKLY_UNIT
+  MONTHLY_MOCK
+  SURPRISE_QUIZ
+  FULL_LENGTH
+}
+
+// ─── CORE USERS & PROFILES ──────────────────────────────
+
+model User {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String?  @unique @db.VarChar(255)
+  phone        String?  @unique @db.VarChar(20)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  fullName     String   @map("full_name") @db.VarChar(100)
+  role         UserRole @default(STUDENT)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relations
+  studentProfile    StudentProfile?
+  parentLinks       ParentStudentLink[] @relation("ParentUser")
+  childLinks        ParentStudentLink[] @relation("StudentUser")
+  taughtSubjects    Subject[]           @relation("SubjectTeacher")
+  createdTests      OfflineTest[]       @relation("TestCreator")
+  testMarksStudent  TestMark[]          @relation("StudentMarks")
+  testMarksEnteredBy TestMark[]         @relation("MarksEnteredBy")
+  attendanceStudent Attendance[]        @relation("AttendanceStudent")
+  attendanceMarkedBy Attendance[]       @relation("AttendanceMarkedBy")
+
+  @@map("users")
+}
+
+model Branch {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @db.VarChar(100)
+  city      String   @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  // Relations
+  batches Batch[]
+
+  @@map("branches")
+}
+
+model Batch {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branchId   String   @map("branch_id") @db.Uuid
+  name       String   @db.VarChar(100) // e.g., 'PSI 2026 Morning Batch'
+  targetExam String   @map("target_exam") @db.VarChar(50) // e.g., 'PSI', 'Constable', 'GPSC'
+  startDate  DateTime? @map("start_date") @db.Date
+  endDate    DateTime? @map("end_date") @db.Date
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  // Relations
+  branch          Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  studentProfiles StudentProfile[]
+  subjects        Subject[]
+  offlineTests    OfflineTest[]
+  attendances     Attendance[]
+
+  @@map("batches")
+}
+
+model StudentProfile {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String   @unique @map("user_id") @db.Uuid
+  batchId       String?  @map("batch_id") @db.Uuid
+  rollNumber    String   @map("roll_number") @db.VarChar(50)
+  targetExam    String?  @map("target_exam") @db.VarChar(50)
+  admissionDate DateTime @default(now()) @map("admission_date") @db.Date
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  batch Batch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@map("student_profiles")
+}
+
+model ParentStudentLink {
+  id            String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  parentUserId  String @map("parent_user_id") @db.Uuid
+  studentUserId String @map("student_user_id") @db.Uuid
+  relationship  String @default("Guardian") @db.VarChar(50)
+
+  // Relations
+  parent  User @relation("ParentUser", fields: [parentUserId], references: [id], onDelete: Cascade)
+  student User @relation("StudentUser", fields: [studentUserId], references: [id], onDelete: Cascade)
+
+  @@unique([parentUserId, studentUserId])
+  @@map("parent_student_links")
+}
+
+// ─── ACADEMICS & OFFLINE TESTS ──────────────────────────
+
+model Subject {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  batchId   String  @map("batch_id") @db.Uuid
+  name      String  @db.VarChar(100) // e.g., 'Indian Polity', 'Gujarati Grammar'
+  teacherId String? @map("teacher_id") @db.Uuid
+
+  // Relations
+  batch        Batch        @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  teacher      User?        @relation("SubjectTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
+  offlineTests OfflineTest[]
+
+  @@map("subjects")
+}
+
+model OfflineTest {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  batchId         String   @map("batch_id") @db.Uuid
+  subjectId       String   @map("subject_id") @db.Uuid
+  title           String   @db.VarChar(150)
+  type            TestType @default(WEEKLY_UNIT)
+  totalMarks      Decimal  @map("total_marks") @db.Decimal(5, 2)
+  passingMarks    Decimal  @map("passing_marks") @db.Decimal(5, 2)
+  testDate        DateTime @map("test_date") @db.Date
+  solutionPdfUrl  String?  @map("solution_pdf_url") @db.Text
+  isPublished     Boolean  @default(false) @map("is_published")
+  createdBy       String?  @map("created_by") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  // Relations
+  batch     Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  subject   Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  creator   User?     @relation("TestCreator", fields: [createdBy], references: [id])
+  testMarks TestMark[]
+
+  @@map("offline_tests")
+}
+
+model TestMark {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  testId         String   @map("test_id") @db.Uuid
+  studentId      String   @map("student_id") @db.Uuid
+  marksObtained  Decimal? @map("marks_obtained") @db.Decimal(5, 2)
+  isAbsent       Boolean  @default(false) @map("is_absent")
+  calculatedRank Int?     @map("calculated_rank")
+  remarks        String?  @db.Text
+  enteredBy      String?  @map("entered_by") @db.Uuid
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relations
+  test    OfflineTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+  student User        @relation("StudentMarks", fields: [studentId], references: [id], onDelete: Cascade)
+  enterer User?       @relation("MarksEnteredBy", fields: [enteredBy], references: [id])
+
+  @@unique([testId, studentId])
+  @@map("test_marks")
+}
+
+// ─── ATTENDANCE ─────────────────────────────────────────
+
+model Attendance {
+  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  batchId   String           @map("batch_id") @db.Uuid
+  studentId String           @map("student_id") @db.Uuid
+  date      DateTime         @db.Date
+  status    AttendanceStatus @default(PRESENT)
+  markedBy  String?          @map("marked_by") @db.Uuid
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz()
+
+  // Relations
+  batch   Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  student User  @relation("AttendanceStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  marker  User? @relation("AttendanceMarkedBy", fields: [markedBy], references: [id])
+
+  @@unique([batchId, studentId, date])
+  @@map("attendance")
+}
