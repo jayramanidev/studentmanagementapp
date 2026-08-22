@@ -49,33 +49,50 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+        try {
+          if (!credentials?.email || !credentials?.password) {
+            console.warn("[Auth] Missing email or password");
+            return null;
+          }
+
+          const email = (credentials.email as string).trim().toLowerCase();
+          const password = credentials.password as string;
+
+          console.log(`[Auth] Attempting login for: ${email}`);
+
+          const user = await db.user.findUnique({
+            where: { email },
+          });
+
+          if (!user) {
+            console.warn(`[Auth] User not found with email: ${email}`);
+            return null;
+          }
+
+          if (!user.isActive) {
+            console.warn(`[Auth] User account is inactive: ${email}`);
+            return null;
+          }
+
+          const isPasswordValid = await compare(password, user.passwordHash);
+
+          if (!isPasswordValid) {
+            console.warn(`[Auth] Invalid password for: ${email}`);
+            return null;
+          }
+
+          console.log(`[Auth] Login successful: ${user.fullName} (${user.role})`);
+
+          return {
+            id: user.id,
+            email: user.email ?? "",
+            name: user.fullName,
+            role: user.role as Role,
+          };
+        } catch (error) {
+          console.error("[Auth] Database/Auth error during authorize:", error);
           return null;
         }
-
-        const email = credentials.email as string;
-        const password = credentials.password as string;
-
-        const user = await db.user.findUnique({
-          where: { email },
-        });
-
-        if (!user || !user.isActive) {
-          return null;
-        }
-
-        const isPasswordValid = await compare(password, user.passwordHash);
-
-        if (!isPasswordValid) {
-          return null;
-        }
-
-        return {
-          id: user.id,
-          email: user.email ?? "",
-          name: user.fullName,
-          role: user.role as Role,
-        };
       },
     }),
   ],

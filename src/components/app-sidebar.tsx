@@ -32,6 +32,13 @@ import {
   CalendarCheck,
   TrendingUp,
   BookOpen,
+  Receipt,
+  Megaphone,
+  BrainCircuit,
+  MessageSquare,
+  Activity,
+  ListChecks,
+  Building2,
 } from "lucide-react";
 import { ROLE_NAV_CONFIG, ROLE_LABELS, ROLE_COLORS } from "@/types/auth";
 import type { SessionUser } from "@/lib/auth-utils";
@@ -47,6 +54,13 @@ const iconMap: Record<string, React.ElementType> = {
   CalendarCheck,
   TrendingUp,
   BookOpen,
+  Receipt,
+  Megaphone,
+  BrainCircuit,
+  MessageSquare,
+  Activity,
+  ListChecks,
+  Building2,
 };
 
 interface AppSidebarProps {

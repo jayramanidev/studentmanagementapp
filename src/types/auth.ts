@@ -1,51 +1,39 @@
 /**
- * InstituteOps — Auth Types, RBAC Permissions & Action Response
+ * InstituteOps — Auth & RBAC Type Definitions
  * 
- * Core type definitions for role-based access control.
- * NO ONLINE TEST RUNNER — this system manages offline test scheduling,
- * mark entry, rank calculation, attendance, and dashboards only.
+ * Defines user roles, session payloads, navigation structures,
+ * and permission-checking utilities for the entire application.
  */
 
-// ─── Roles ──────────────────────────────────────────────
-
-export type Role = "ADMIN" | "COORDINATOR" | "TEACHER" | "STUDENT" | "PARENT";
-
-export const ROLES: readonly Role[] = [
-  "ADMIN",
-  "COORDINATOR",
-  "TEACHER",
-  "STUDENT",
-  "PARENT",
-] as const;
-
-// ─── RBAC Permissions (from Architecture.md) ────────────
-
-export type Permission =
-  | "CAN_CREATE_TEST"
-  | "CAN_ENTER_MARKS"
-  | "CAN_PUBLISH_TEST"
-  | "CAN_VIEW_ALL_STUDENT_MARKS"
-  | "CAN_VIEW_OWN_MARKS"
-  | "CAN_MARK_ATTENDANCE"
-  | "CAN_MANAGE_BATCHES"
-  | "CAN_MANAGE_USERS";
-
-export const permissions: Record<Permission, readonly Role[]> = {
-  CAN_CREATE_TEST: ["ADMIN", "COORDINATOR", "TEACHER"],
-  CAN_ENTER_MARKS: ["ADMIN", "COORDINATOR", "TEACHER"],
-  CAN_PUBLISH_TEST: ["ADMIN", "COORDINATOR"],
-  CAN_VIEW_ALL_STUDENT_MARKS: ["ADMIN", "COORDINATOR", "TEACHER"],
-  CAN_VIEW_OWN_MARKS: ["STUDENT", "PARENT"],
-  CAN_MARK_ATTENDANCE: ["ADMIN", "COORDINATOR", "TEACHER"],
-  CAN_MANAGE_BATCHES: ["ADMIN", "COORDINATOR"],
-  CAN_MANAGE_USERS: ["ADMIN"],
+export type UserRole = "ADMIN" | "COORDINATOR" | "TEACHER" | "STUDENT" | "PARENT";
+export const UserRole = {
+  ADMIN: "ADMIN",
+  COORDINATOR: "COORDINATOR",
+  TEACHER: "TEACHER",
+  STUDENT: "STUDENT",
+  PARENT: "PARENT",
 } as const;
 
-export function hasPermission(role: Role, permission: Permission): boolean {
-  return permissions[permission].includes(role);
+// Type alias for cleaner usage across the codebase
+export type Role = UserRole;
+
+// ─── Extended Session & User Types ───────────────────────
+
+export interface SessionUser {
+  id: string;
+  email: string | null;
+  name: string;
+  role: Role;
+  phone?: string | null;
+  isActive: boolean;
 }
 
-// ─── Role → Dashboard Route Mapping ────────────────────
+export interface AuthenticatedSession {
+  user: SessionUser;
+  expires: string;
+}
+
+// ─── Role Hierarchy & Access Levels ──────────────────────
 
 export const ROLE_DASHBOARD_MAP: Record<Role, string> = {
   ADMIN: "/admin",
@@ -70,6 +58,33 @@ export const ROLE_COLORS: Record<Role, string> = {
   STUDENT: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
   PARENT: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
 } as const;
+
+// ─── Permission Definitions ─────────────────────────────
+
+export type Permission =
+  | "manage:batches"
+  | "manage:teachers"
+  | "manage:students"
+  | "manage:tests"
+  | "enter:marks"
+  | "publish:marks"
+  | "view:reports"
+  | "view:all_students"
+  | "view:child_data"
+  | "view:own_data";
+
+export const permissions: Record<Permission, Role[]> = {
+  "manage:batches": ["ADMIN", "COORDINATOR"],
+  "manage:teachers": ["ADMIN"],
+  "manage:students": ["ADMIN", "COORDINATOR"],
+  "manage:tests": ["ADMIN", "COORDINATOR", "TEACHER"],
+  "enter:marks": ["ADMIN", "COORDINATOR", "TEACHER"],
+  "publish:marks": ["ADMIN", "COORDINATOR"],
+  "view:reports": ["ADMIN", "COORDINATOR", "TEACHER"],
+  "view:all_students": ["ADMIN", "COORDINATOR", "TEACHER"],
+  "view:child_data": ["PARENT"],
+  "view:own_data": ["STUDENT"],
+};
 
 // ─── Server Action Response Pattern (from rules.md) ────
 
@@ -97,21 +112,29 @@ export const ROLE_NAV_CONFIG: Record<string, NavSection[]> = {
       label: "Overview",
       items: [
         { title: "Dashboard", href: "/admin", icon: "LayoutDashboard" },
+        { title: "AI Analytics", href: "/admin/analytics", icon: "BrainCircuit" },
+        { title: "Notice Board", href: "/admin/notices", icon: "Megaphone" },
+        { title: "SMS & WhatsApp", href: "/admin/alerts", icon: "MessageSquare" },
       ],
     },
     {
       label: "Management",
       items: [
+        { title: "Branches", href: "/admin/branches", icon: "Building2" },
         { title: "Batches", href: "/admin/batches", icon: "Users" },
         { title: "Teachers", href: "/admin/teachers", icon: "GraduationCap" },
         { title: "Students", href: "/admin/students", icon: "UserPlus" },
+        { title: "Fee Ledger", href: "/admin/fees", icon: "Receipt" },
       ],
     },
     {
-      label: "Academics",
+      label: "Academics & Physical",
       items: [
-        { title: "Tests", href: "/admin/tests", icon: "ClipboardList" },
-        { title: "Reports", href: "/admin/reports", icon: "BarChart3" },
+        { title: "Attendance", href: "/admin/attendance", icon: "CalendarCheck" },
+        { title: "Offline Tests", href: "/admin/tests", icon: "ClipboardList" },
+        { title: "Ground Fitness", href: "/admin/physical", icon: "Activity" },
+        { title: "Syllabus Tracker", href: "/admin/syllabus", icon: "ListChecks" },
+        { title: "Study Materials", href: "/admin/materials", icon: "BookOpen" },
       ],
     },
   ],
@@ -120,6 +143,9 @@ export const ROLE_NAV_CONFIG: Record<string, NavSection[]> = {
       label: "Overview",
       items: [
         { title: "Dashboard", href: "/admin", icon: "LayoutDashboard" },
+        { title: "AI Analytics", href: "/admin/analytics", icon: "BrainCircuit" },
+        { title: "Notice Board", href: "/admin/notices", icon: "Megaphone" },
+        { title: "SMS & WhatsApp", href: "/admin/alerts", icon: "MessageSquare" },
       ],
     },
     {
@@ -127,13 +153,17 @@ export const ROLE_NAV_CONFIG: Record<string, NavSection[]> = {
       items: [
         { title: "Batches", href: "/admin/batches", icon: "Users" },
         { title: "Teachers", href: "/admin/teachers", icon: "GraduationCap" },
+        { title: "Fee Ledger", href: "/admin/fees", icon: "Receipt" },
       ],
     },
     {
-      label: "Academics",
+      label: "Academics & Physical",
       items: [
-        { title: "Tests", href: "/admin/tests", icon: "ClipboardList" },
-        { title: "Reports", href: "/admin/reports", icon: "BarChart3" },
+        { title: "Attendance", href: "/admin/attendance", icon: "CalendarCheck" },
+        { title: "Offline Tests", href: "/admin/tests", icon: "ClipboardList" },
+        { title: "Ground Fitness", href: "/admin/physical", icon: "Activity" },
+        { title: "Syllabus Tracker", href: "/admin/syllabus", icon: "ListChecks" },
+        { title: "Study Materials", href: "/admin/materials", icon: "BookOpen" },
       ],
     },
   ],
@@ -145,10 +175,13 @@ export const ROLE_NAV_CONFIG: Record<string, NavSection[]> = {
       ],
     },
     {
-      label: "Academics",
+      label: "Academics & Ground",
       items: [
-        { title: "Attendance", href: "/faculty/attendance", icon: "CalendarCheck" },
-        { title: "Tests", href: "/faculty/tests", icon: "ClipboardList" },
+        { title: "Attendance Register", href: "/faculty/attendance", icon: "CalendarCheck" },
+        { title: "Tests & Marks", href: "/faculty/tests", icon: "ClipboardList" },
+        { title: "Ground Fitness", href: "/faculty/physical", icon: "Activity" },
+        { title: "Syllabus Tracker", href: "/faculty/syllabus", icon: "ListChecks" },
+        { title: "Study Materials", href: "/faculty/materials", icon: "BookOpen" },
       ],
     },
   ],
@@ -157,14 +190,18 @@ export const ROLE_NAV_CONFIG: Record<string, NavSection[]> = {
       label: "Overview",
       items: [
         { title: "Dashboard", href: "/student", icon: "LayoutDashboard" },
+        { title: "AI Exam Readiness", href: "/student/readiness", icon: "BrainCircuit" },
+        { title: "Notice Board", href: "/student/notices", icon: "Megaphone" },
       ],
     },
     {
-      label: "Academics",
+      label: "Academics & Fitness",
       items: [
-        { title: "Performance", href: "/student/performance", icon: "TrendingUp" },
-        { title: "Attendance", href: "/student/attendance", icon: "CalendarCheck" },
-        { title: "Materials", href: "/student/materials", icon: "BookOpen" },
+        { title: "My Performance", href: "/student/performance", icon: "TrendingUp" },
+        { title: "Ground Fitness", href: "/student/physical", icon: "Activity" },
+        { title: "Syllabus Tracker", href: "/student/syllabus", icon: "ListChecks" },
+        { title: "Study Materials", href: "/student/materials", icon: "BookOpen" },
+        { title: "Fee Receipts", href: "/student/fees", icon: "Receipt" },
       ],
     },
   ],
@@ -173,12 +210,15 @@ export const ROLE_NAV_CONFIG: Record<string, NavSection[]> = {
       label: "Overview",
       items: [
         { title: "Dashboard", href: "/parent", icon: "LayoutDashboard" },
+        { title: "SMS & Alerts", href: "/parent/alerts", icon: "MessageSquare" },
+        { title: "Notice Board", href: "/parent/notices", icon: "Megaphone" },
       ],
     },
     {
       label: "Child Progress",
       items: [
         { title: "Performance", href: "/parent/dashboard", icon: "TrendingUp" },
+        { title: "Tuition Fees", href: "/parent/fees", icon: "Receipt" },
       ],
     },
   ],

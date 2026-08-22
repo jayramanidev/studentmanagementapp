@@ -35,6 +35,62 @@ enum TestType {
   FULL_LENGTH
 }
 
+enum MaterialCategory {
+  CLASS_NOTES
+  PYQ_PAPER
+  REFERENCE_BOOK
+  SYLLABUS_COPY
+}
+
+enum PaymentMode {
+  CASH
+  UPI
+  NET_BANKING
+  CHEQUE
+}
+
+enum NoticePriority {
+  INFO
+  IMPORTANT
+  URGENT
+}
+
+enum NoticeAudience {
+  ALL
+  STUDENTS_ONLY
+  PARENTS_ONLY
+  FACULTY_ONLY
+}
+
+enum AlertChannel {
+  WHATSAPP
+  SMS
+}
+
+enum AlertType {
+  TEST_RESULT
+  ATTENDANCE_ABSENT
+  FEE_REMINDER
+  CUSTOM_BROADCAST
+}
+
+enum AlertStatus {
+  DELIVERED
+  SENT
+  FAILED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum TopicStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
 // ─── CORE USERS & PROFILES ──────────────────────────────
 
 model User {
@@ -49,15 +105,25 @@ model User {
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
 
   // Relations
-  studentProfile    StudentProfile?
-  parentLinks       ParentStudentLink[] @relation("ParentUser")
-  childLinks        ParentStudentLink[] @relation("StudentUser")
-  taughtSubjects    Subject[]           @relation("SubjectTeacher")
-  createdTests      OfflineTest[]       @relation("TestCreator")
-  testMarksStudent  TestMark[]          @relation("StudentMarks")
-  testMarksEnteredBy TestMark[]         @relation("MarksEnteredBy")
-  attendanceStudent Attendance[]        @relation("AttendanceStudent")
+  studentProfile     StudentProfile?
+  parentLinks        ParentStudentLink[] @relation("ParentUser")
+  childLinks         ParentStudentLink[] @relation("StudentUser")
+  taughtSubjects     Subject[]           @relation("SubjectTeacher")
+  createdTests       OfflineTest[]       @relation("TestCreator")
+  testMarksStudent   TestMark[]          @relation("StudentMarks")
+  testMarksEnteredBy TestMark[]          @relation("MarksEnteredBy")
+  attendanceStudent  Attendance[]        @relation("AttendanceStudent")
   attendanceMarkedBy Attendance[]       @relation("AttendanceMarkedBy")
+  uploadedMaterials  StudyMaterial[]     @relation("MaterialUploader")
+  feePaymentsStudent FeePayment[]        @relation("StudentFeePayments")
+  feePaymentsRecorded FeePayment[]       @relation("FeeRecordedBy")
+  publishedNotices   Notice[]            @relation("NoticePublisher")
+  sentAlerts         AlertNotification[] @relation("AlertSender")
+  studentAlerts      AlertNotification[] @relation("AlertTargetStudent")
+  physicalRecordsStudent PhysicalFitnessRecord[] @relation("PhysicalStudent")
+  physicalRecordsRecorded PhysicalFitnessRecord[] @relation("PhysicalRecordedBy")
+  createdTopics      SyllabusTopic[]       @relation("TopicCreator")
+  topicProgressUpdated TopicProgress[]     @relation("TopicProgressUpdater")
 
   @@map("users")
 }
@@ -89,6 +155,12 @@ model Batch {
   subjects        Subject[]
   offlineTests    OfflineTest[]
   attendances     Attendance[]
+  materials       StudyMaterial[]
+  feePayments     FeePayment[]
+  notices         Notice[]
+  alerts          AlertNotification[]
+  physicalRecords PhysicalFitnessRecord[]
+  syllabusTopics  SyllabusTopic[]
 
   @@map("batches")
 }
@@ -99,6 +171,7 @@ model StudentProfile {
   batchId       String?  @map("batch_id") @db.Uuid
   rollNumber    String   @map("roll_number") @db.VarChar(50)
   targetExam    String?  @map("target_exam") @db.VarChar(50)
+  gender        Gender   @default(MALE)
   admissionDate DateTime @default(now()) @map("admission_date") @db.Date
 
   // Relations
@@ -131,9 +204,11 @@ model Subject {
   teacherId String? @map("teacher_id") @db.Uuid
 
   // Relations
-  batch        Batch        @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  teacher      User?        @relation("SubjectTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
+  batch        Batch          @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  teacher      User?          @relation("SubjectTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
   offlineTests OfflineTest[]
+  materials    StudyMaterial[]
+  syllabusTopics SyllabusTopic[]
 
   @@map("subjects")
 }
@@ -199,4 +274,157 @@ model Attendance {
 
   @@unique([batchId, studentId, date])
   @@map("attendance")
+}
+
+// ─── STUDY MATERIALS & PYQS ─────────────────────────────
+
+model StudyMaterial {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  batchId     String           @map("batch_id") @db.Uuid
+  subjectId   String?          @map("subject_id") @db.Uuid
+  title       String           @db.VarChar(150)
+  description String?          @db.Text
+  category    MaterialCategory @default(CLASS_NOTES)
+  fileUrl     String           @map("file_url") @db.Text
+  uploadedBy  String?          @map("uploaded_by") @db.Uuid
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz()
+
+  // Relations
+  batch    Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  subject  Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  uploader User?    @relation("MaterialUploader", fields: [uploadedBy], references: [id])
+
+  @@map("study_materials")
+}
+
+// ─── FEE MANAGEMENT ─────────────────────────────────────
+
+model FeePayment {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId      String      @map("student_id") @db.Uuid
+  batchId        String      @map("batch_id") @db.Uuid
+  receiptNumber  String      @unique @map("receipt_number") @db.VarChar(50)
+  amountPaid     Decimal     @map("amount_paid") @db.Decimal(10, 2)
+  totalCourseFee Decimal     @map("total_course_fee") @db.Decimal(10, 2)
+  paymentMode    PaymentMode @default(UPI) @map("payment_mode")
+  paymentDate    DateTime    @default(now()) @map("payment_date") @db.Date
+  transactionRef String?     @map("transaction_ref") @db.VarChar(100)
+  installmentNo  Int         @default(1) @map("installment_no")
+  remarks        String?     @db.Text
+  recordedBy     String?     @map("recorded_by") @db.Uuid
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz()
+
+  // Relations
+  student  User  @relation("StudentFeePayments", fields: [studentId], references: [id], onDelete: Cascade)
+  batch    Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  recorder User? @relation("FeeRecordedBy", fields: [recordedBy], references: [id])
+
+  @@map("fee_payments")
+}
+
+// ─── NOTICES & ANNOUNCEMENTS ───────────────────────────
+
+model Notice {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title       String         @db.VarChar(150)
+  content     String         @db.Text
+  priority    NoticePriority @default(INFO)
+  audience    NoticeAudience @default(ALL)
+  batchId     String?        @map("batch_id") @db.Uuid
+  publishedBy String?        @map("published_by") @db.Uuid
+  isPinned    Boolean        @default(false) @map("is_pinned")
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz()
+
+  // Relations
+  batch     Batch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  publisher User?  @relation("NoticePublisher", fields: [publishedBy], references: [id])
+
+  @@map("notices")
+}
+
+// ─── NOTIFICATION & ALERT LOGS ─────────────────────────
+
+model AlertNotification {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipientPhone String       @map("recipient_phone") @db.VarChar(20)
+  recipientName  String       @map("recipient_name") @db.VarChar(100)
+  studentId      String?      @map("student_id") @db.Uuid
+  batchId        String?      @map("batch_id") @db.Uuid
+  message        String       @db.Text
+  channel        AlertChannel @default(WHATSAPP)
+  alertType      AlertType    @default(TEST_RESULT) @map("alert_type")
+  status         AlertStatus  @default(DELIVERED)
+  sentBy         String?      @map("sent_by") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+
+  // Relations
+  student   User?  @relation("AlertTargetStudent", fields: [studentId], references: [id], onDelete: SetNull)
+  batch     Batch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  sender    User?  @relation("AlertSender", fields: [sentBy], references: [id])
+
+  @@map("alert_notifications")
+}
+
+// ─── PHYSICAL FITNESS & GROUND TRACKER ─────────────────
+
+model PhysicalFitnessRecord {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId             String   @map("student_id") @db.Uuid
+  batchId               String   @map("batch_id") @db.Uuid
+  testDate              DateTime @map("test_date") @db.Date
+  gender                Gender   @default(MALE)
+  runningDistanceMeters Int      @default(5000) @map("running_distance_meters") // 5000 (Male) or 1600 (Female)
+  runningTimeSeconds    Int      @map("running_time_seconds") // e.g. 1185 = 19m 45s
+  runningMarks          Decimal  @map("running_marks") @db.Decimal(4, 1) // e.g. 25.0
+  pullUpsCount          Int?     @map("pull_ups_count") // Beam / Pull-ups
+  longJumpMeters        Decimal? @map("long_jump_meters") @db.Decimal(4, 2)
+  isQualified           Boolean  @default(true) @map("is_qualified")
+  remarks               String?  @db.Text
+  recordedBy            String?  @map("recorded_by") @db.Uuid
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  // Relations
+  student  User  @relation("PhysicalStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  batch    Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  recorder User? @relation("PhysicalRecordedBy", fields: [recordedBy], references: [id])
+
+  @@map("physical_fitness_records")
+}
+
+// ─── SYLLABUS TOPIC TRACKER ────────────────────────────
+
+model SyllabusTopic {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  batchId      String   @map("batch_id") @db.Uuid
+  subjectId    String?  @map("subject_id") @db.Uuid
+  chapterName  String   @map("chapter_name") @db.VarChar(150)
+  topicName    String   @map("topic_name") @db.VarChar(200)
+  orderIndex   Int      @default(0) @map("order_index")
+  createdBy    String?  @map("created_by") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  // Relations
+  batch    Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  subject  Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  creator  User?    @relation("TopicCreator", fields: [createdBy], references: [id])
+  progress TopicProgress[]
+
+  @@map("syllabus_topics")
+}
+
+model TopicProgress {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  topicId     String      @map("topic_id") @db.Uuid
+  studentId   String      @map("student_id") @db.Uuid
+  status      TopicStatus @default(NOT_STARTED)
+  completedAt DateTime?   @map("completed_at") @db.Timestamptz()
+  updatedBy   String?     @map("updated_by") @db.Uuid
+  updatedAt   DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Relations
+  topic   SyllabusTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  updater User?         @relation("TopicProgressUpdater", fields: [updatedBy], references: [id])
+
+  @@unique([topicId, studentId])
+  @@map("topic_progress")
 }
