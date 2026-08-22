@@ -1,4 +1,4 @@
-Rank Computation Logic
+**Rank Computation Logic
 When publishTestMarksAction(testId: string) is triggered:
 
 Fetch all test_marks for the given test_id where is_absent = false.
@@ -142,4 +142,4 @@ v
 └── actions/
 ├── tests.ts                          # createTest, publishMarks
 ├── marks.ts                          # saveBulkMarksAction
-└── attendance.ts                     # markBatchAttendanceAction
+**└── attendance.ts                     # markBatchAttendanceAction
